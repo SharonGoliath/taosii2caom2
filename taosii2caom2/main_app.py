@@ -150,7 +150,9 @@ from caom2 import CoordAxis2D, Dimension2D, DataProductType, Target
 from caom2 import CalibrationLevel, TargetType, Provenance, Proposal
 from caom2 import CoordPolygon2D, ValueCoord2D, Observation
 
-from caom2pipe import manage_composable as mc
+from caom2pipe import caom_composable as cc
+from caom2pipe.manage_composable import CadcException, StorageName
+from caom2pipe.manage_composable import check_param, write_obs_to_file
 
 
 __all__ = ['APPLICATION', 'ARCHIVE', 'to_caom2', 'taosii_main_app',
@@ -407,7 +409,123 @@ def build_from_hdf5(args):
 #    DATASET "window" {
 
 
-class TAOSIIName(mc.StorageName):
+class TAOSIIMapping(cc.TelescopeMapping):
+
+    def __init__(self, storage_name, headers):
+        super().__init__(storage_name, headers)
+
+    def accumulate_blueprint(self, bp, application=None):
+        """
+        JJK - 17-03-22
+
+         v = {"Observation":
+             {"observationID":  f"{fobj['header'][]}",
+              "type": f"{fobj['header']['run']['obstype']}",
+              "metaRelease": now,
+              "algorithm": {"name": "/header/run/exptype"},
+              "instrument": {"name": "/header/run/origin",
+                             "keywords": f"{fobj['header']['run']['exptype']}"},
+              "proposaal": {"id": "/header/run/run_seq",
+                            "pi": f"{fobj[['header']['run']['observer']}",
+                            "project": "TAOS2",
+                            "title": "Transneptunian Automated Occultation Survey",
+                            "keywords": "Kuiper Belt, Trans Neptunian Object, Occultations"
+                            },
+              "target": {"name": f"{fobj['header']['pointing']['field_id']}",
+                         "type": f"{fobj['header']['run']['imgtype']}",
+                         "targetID": f"{fobj['haeder']['object']['obj_type']}:{fobj['header']['object']['obj_id']}",
+                         "type": f"{fobj['header']['object']['obj_type']}"
+                         },
+              # "telescope": {"name": f"{fobj['header']['device']}"
+              "telescope": {
+                  "name": "TAOS-II",
+                  # Long = -115.454
+                  # Lat  =   31.041
+                  # Elev = 2820m
+                  "geoLocationX": "",
+                  "geoLocationY": "",
+                  "geoLocationZ": "",
+                        }
+              "environment": {
+                  "ambientTemp": "db.taos2.temperature"
+              }
+          "Plane": {
+              "productID": ""
+          }
+        }
+
+        :param bp:
+        :param application:
+        :return:
+        """
+        super().accumulate_blueprint(bp, APPLICATION)
+        # TODO - need to verify that 3 is a thing
+        # - two spatial, one temporal, don't know if there's an energy
+        # 4 dimension hdf5 file, x, y, time, telescope
+        # but there's a hard-coded energy
+        bp.set('Chunk.naxis', 4)
+
+        # need a way to 're-root' a look-up path, so that, for example,
+        # all the site1, site2, site3 entries are processed
+        #
+        # for taosii, those are parts, but there's nothing to say that
+        # some other telescope won't have a different cardinality
+        #
+        # this is the path:
+        # Chunk.position.axis.axis1.ctype = /header/wcs/ctype[0]
+        #
+        """
+        need n WCS instances - one per site, so three per file, so, how
+        to know when to create those, and how many to create?
+        - I think that knowing there are n (three) per file is just a thing 
+        that is known ahead of time, and that the path to the 'n' bits is
+        part of the construction of HCF5Parser
+        - then, the separate WCSParser bits are constructed as part of that
+        handling?
+        
+        For FITS:
+        e.g. Chunk.position.axis.axis1.ctype = CTYPE1
+
+        For HDF5:
+        e.g. Chunk.position.axis.axis1.ctype = /header/wcs/ctype[0]
+        
+        BUT
+        - need an astropy.wcs.WCS construction for correctness/consistency
+
+        - for the FITS file, the WCS construction is handled by astropy
+        - for the HDF5 file, the WCS construction needs to be handled by
+          blueprint (?) code, so something like:
+          w.wcs.ctype = [value from HDF5 file, which is found by looking 
+                         up the CAOM2 key, which is then used to retrieve
+                         the value from the HDF5 file]
+        """
+        #
+        bp.set('Observation.type', '/header/run/obstype')
+        bp.set('Observation.metaRelease', datetime.now())
+        bp.set('Observation.algorithm.name', '/header/run/exptype')
+        bp.set('Observation.instrument.name', '/header/run/origin')
+        bp.set('Observation.instrument.keywords', '/header/run/exptype')
+        bp.set('Observation.proposal.id', '/header/run/run_seq')
+        bp.set('Observation.proposal.pi', '/header/run/observer')
+        bp.set('Observation.proposal.project', 'TAOS2')
+        bp.set(
+            'Observation.proposal.title',
+            'Transneptunian Automated Occultation Survey'
+        )
+        bp.set(
+            'Observation.proposal.keywords',
+            ['Kuiper Belt', 'Trans Neptunian Object', 'Occultations'],
+        )
+        bp.set('Observation.target.name', '/header/pointing/field_id')
+        bp.set('Observation.target.type', '/header/run/imgtype')
+        bp.set('Observation.target.targetID', '/header/object/obj_type')
+        # x, y, z = ac.get_location(31.041, -115.454, 2820)
+        bp.set('Observation.telescope.geoLocationX', -2351818.5502637075)
+        bp.set('Observation.telescope.geoLocationY', -4940894.8697881885)
+        bp.set('Observation.telescope.geoLocationZ', 3271243.2086214763)
+
+
+class TAOSIIName(StorageName):
     """Naming rules:
     - support mixed-case file name storage, and mixed-case obs id values
     - support uncompressed files in storage
@@ -415,28 +533,23 @@ class TAOSIIName(mc.StorageName):
 
     TAOSII_NAME_PATTERN = '*'
 
-    def __init__(self, file_name=None, entry=None):
-        self._file_name = file_name
-        self._obs_id = TAOSIIName.get_obs_id(file_name)
-        super(TAOSIIName, self).__init__(
-            self._obs_id, COLLECTION, TAOSIIName.TAOSII_NAME_PATTERN,
-            file_name, entry=entry)
-
-    @property
-    def file_name(self):
-        return self._file_name
-
-    @property
-    def product_id(self):
-        return 'pixel'
+    def __init__(self, file_name=None):
+        super().__init__(file_name=file_name, source_names=[file_name])
 
     def is_valid(self):
         return True
 
-    @staticmethod
-    def get_obs_id(value):
-        bits = value.split('.')[0].split('_')
-        return f'{bits[1]}_{bits[2]}'
+    def set_file_id(self):
+        self._file_id = StorageName.remove_extensions(
+            self._file_name
+        ).replace('.hdf5', '').replace('.h5', '')
+
+    def set_obs_id(self):
+        bits = self._file_name.split('.')[0].split('_')
+        self._obs_id = f'{bits[1]}_{bits[2]}'
+
+    def set_product_id(self):
+        self._product_id = 'pixel'
 
 
 def accumulate_bp(bp, uri):
@@ -458,19 +571,19 @@ def update(observation, **kwargs):
     :param observation A CAOM Observation model instance.
     :param **kwargs Everything else."""
     logging.debug('Begin update.')
-    mc.check_param(observation, Observation)
+    check_param(observation, Observation)
 
     headers = kwargs.get('headers')
     fqn = kwargs.get('fqn')
     uri = kwargs.get('uri')
     taosii_name = None
     if uri is not None:
-        taosii_name = TAOSIIName(artifact_uri=uri)
+        taosii_name = TAOSIIName(artifact_furi=uri)
     if fqn is not None:
         taosii_name = TAOSIIName(file_name=os.path.basename(fqn))
     if taosii_name is None:
-        raise mc.CadcException(f'Need one of fqn or uri defined for '
-                               f'{observation.observation_id}')
+        raise CadcException(f'Need one of fqn or uri defined for '
+                            f'{observation.observation_id}')
     logging.debug('Done update.')
     return observation
 
@@ -487,7 +600,7 @@ def _build_blueprints(uris):
     blueprints = {}
     for uri in uris:
         blueprint = ObsBlueprint(module=module)
-        if not mc.StorageName.is_preview(uri):
+        if not StorageName.is_preview(uri):
             accumulate_bp(blueprint, uri)
         blueprints[uri] = blueprint
     return blueprints
@@ -497,14 +610,14 @@ def _get_uris(args):
     result = []
     if args.local:
         for ii in args.local:
-            file_id = mc.StorageName.remove_extensions(os.path.basename(ii))
+            file_id = StorageName.remove_extensions(os.path.basename(ii))
             file_name = f'{file_id}.fits'
             result.append(TAOSIIName(file_name=file_name).file_uri)
     elif args.lineage:
         for ii in args.lineage:
             result.append(ii.split('/', 1)[1])
     else:
-        raise mc.CadcException(
+        raise CadcException(
             f'Could not define uri from these args {args}')
     return result
 
@@ -517,7 +630,7 @@ def to_caom2():
     # blueprints = _build_blueprints(uris)
     # result = gen_proc(args, blueprints)
     obs = build_from_hdf5(args)
-    mc.write_obs_to_file(obs, f'./{obs.observation_id}.actual.xml')
+    write_obs_to_file(obs, f'./{obs.observation_id}.actual.xml')
     logging.debug(f'Done {APPLICATION} processing.')
     return 1
 
