@@ -106,15 +106,17 @@ def test_main_app(test_name):
     product_id = 'pixel'
     output_file = '{}/{}.actual.xml'.format(TEST_DATA_DIR, storage_name.obs_id)
     lineage = '{}/ad:TAOSII/{}'.format(product_id, storage_name.file_name)
-    sys.argv = \
-        (f'{main_app.APPLICATION} --no_validate --local {local} '
-         f'--plugin {plugin} --module {plugin} --observation TAOSII '
-         f'{storage_name.obs_id} -o {output_file} --lineage {lineage}').split()
+    sys.argv = (
+        f'{main_app.APPLICATION} --no_validate --local {local} '
+        f'--plugin {plugin} --module {plugin} --observation TAOSII '
+        f'{storage_name.obs_id} -o {output_file} --lineage {lineage}'
+    ).split()
     print(sys.argv)
     main_app.to_caom2()
 
-    expected_fqn = os.path.join(TEST_DATA_DIR,
-                                f'{storage_name.obs_id}.expected.xml')
+    expected_fqn = os.path.join(
+        TEST_DATA_DIR, f'{storage_name.obs_id}.expected.xml'
+    )
     compare_result = mc.compare_observations(output_file, expected_fqn)
     if compare_result is not None:
         raise AssertionError(compare_result)
@@ -126,8 +128,9 @@ def _get_file_info(archive, file_id):
 
 
 def _get_lineage(blank_name):
-    result = mc.get_lineage(ARCHIVE, blank_name.product_id,
-                            f'{blank_name.file_name}')
+    result = mc.get_lineage(
+        ARCHIVE, blank_name.product_id, f'{blank_name.file_name}'
+    )
     return result
 
 

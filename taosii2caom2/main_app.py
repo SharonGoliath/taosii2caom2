@@ -155,8 +155,14 @@ from caom2pipe.manage_composable import CadcException, StorageName
 from caom2pipe.manage_composable import check_param, write_obs_to_file
 
 
-__all__ = ['APPLICATION', 'ARCHIVE', 'to_caom2', 'taosii_main_app',
-           'COLLECTION', 'TAOSIIName']
+__all__ = [
+    'APPLICATION',
+    'ARCHIVE',
+    'to_caom2',
+    'taosii_main_app',
+    'COLLECTION',
+    'TAOSIIName',
+]
 
 
 APPLICATION = 'taosii2caom2'
@@ -169,16 +175,18 @@ def build_energy():
     min = 400
     max = 800
     central_wl = (min + max) / 2.0  # = 1200.0 / 2.0 == 600.0 nm
-    fwhm = (max - min)
+    fwhm = max - min
     ref_coord1 = RefCoord(0.5, central_wl - fwhm / 2.0)  # == 100.0 nm
     ref_coord2 = RefCoord(1.5, central_wl + fwhm / 2.0)  # == 500.0 nm
     axis = CoordAxis1D(axis=Axis(ctype='WAVE', cunit='nm'))
     axis.range = CoordRange1D(ref_coord1, ref_coord2)
-    energy = SpectralWCS(axis=axis,
-                         specsys='TOPOCENT',
-                         ssyssrc='TOPOCENT',
-                         ssysobs='TOPOCENT',
-                         bandpass_name='CLEAR')
+    energy = SpectralWCS(
+        axis=axis,
+        specsys='TOPOCENT',
+        ssyssrc='TOPOCENT',
+        ssysobs='TOPOCENT',
+        bandpass_name='CLEAR',
+    )
     return energy
 
 
@@ -194,20 +202,26 @@ def build_time(seconds, microseconds):
 
     axis = CoordAxis1D(axis=Axis(ctype='TIME', cunit='d'))
     axis.range = CoordRange1D(start, end)
-    return TemporalWCS(axis=axis,
-                       timesys='UTC',
-                       trefpos=None,
-                       mjdref=None,
-                       exposure=(microseconds / 1e7),
-                       resolution=None)
+    return TemporalWCS(
+        axis=axis,
+        timesys='UTC',
+        trefpos=None,
+        mjdref=None,
+        exposure=(microseconds / 1e7),
+        resolution=None,
+    )
 
 
 def build_position(hdf5_wcs, window, telescope):
     h = Header()
     # logging.error(hdf5_wcs)
     # logging.error(window)
-    h['NAXIS1'] = window['X1'].data[telescope] - window['X0'].data[telescope] + 1
-    h['NAXIS2'] = window['Y1'].data[telescope] - window['Y0'].data[telescope] + 1
+    h['NAXIS1'] = (
+        window['X1'].data[telescope] - window['X0'].data[telescope] + 1
+    )
+    h['NAXIS2'] = (
+        window['Y1'].data[telescope] - window['Y0'].data[telescope] + 1
+    )
     h['CRVAL1'] = hdf5_wcs['CRVAL1'].data[telescope]
     h['CRVAL2'] = hdf5_wcs['CRVAL2'].data[telescope]
     h['CRPIX1'] = hdf5_wcs['CRPIX1'].data[telescope]
@@ -244,18 +258,19 @@ def build_position(hdf5_wcs, window, telescope):
     #                            cd12=0.0,
     #                            cd21=0.0,
     #                            cd22=4.0/3600.0)
-    axis = CoordAxis2D(axis1=Axis(ctype='RA---TAN', cunit='deg'),
-                       axis2=Axis(ctype='DEC--TAN', cunit='deg'),
-                       error1=None,
-                       error2=None,
-                       range=None,
-                       bounds=bounds,
-                       function=None)
+    axis = CoordAxis2D(
+        axis1=Axis(ctype='RA---TAN', cunit='deg'),
+        axis2=Axis(ctype='DEC--TAN', cunit='deg'),
+        error1=None,
+        error2=None,
+        range=None,
+        bounds=bounds,
+        function=None,
+    )
 
-    return SpatialWCS(axis=axis,
-                      coordsys='FK5',
-                      equinox=2000.0,
-                      resolution=None)
+    return SpatialWCS(
+        axis=axis, coordsys='FK5', equinox=2000.0, resolution=None
+    )
 
 
 def build_from_hdf5(args):
@@ -276,7 +291,8 @@ def build_from_hdf5(args):
         # 20190805T024026
         # logging.error(t_header['RUN_ID'].data[0].decode())
         release_date = datetime.strptime(
-            t_header['RUN_ID'].data[0].decode(), '%Y%m%dT%H%M%S')
+            t_header['RUN_ID'].data[0].decode(), '%Y%m%dT%H%M%S'
+        )
 
         t_image = Table.read(f_name, format='hdf5', path='image')
         # logging.error(t_image.colnames)
@@ -306,82 +322,97 @@ def build_from_hdf5(args):
         # ['X0', 'X1', 'Y0', 'Y1', 'XC', 'YC']
         # logging.error(t_window)
 
-        t_wcs= Table.read(f_name, format='hdf5', path='/wcs/cdmatrix')
+        t_wcs = Table.read(f_name, format='hdf5', path='/wcs/cdmatrix')
         # ['CRVAL1','CRVAL2','CRPIX1','CRPIX2','CD1_1','CD1_2','CD2_1','CD2_2']
         # logging.error(t_wcs)
 
-        taos = Telescope(name='TAOS',
-                         geo_location_x=-2354953.99637757,
-                         geo_location_y=-4940160.3636381,
-                         geo_location_z=3270123.70695983)
+        taos = Telescope(
+            name='TAOS',
+            geo_location_x=-2354953.99637757,
+            geo_location_y=-4940160.3636381,
+            geo_location_z=3270123.70695983,
+        )
 
-        target = Target(name=str(t_header['FIELD'].data[0]),
-                        target_type=TargetType.FIELD,
-                        standard=None,
-                        redshift=None,
-                        keywords=None,
-                        moving=None)
+        target = Target(
+            name=str(t_header['FIELD'].data[0]),
+            target_type=TargetType.FIELD,
+            standard=None,
+            redshift=None,
+            keywords=None,
+            moving=None,
+        )
 
-        proposal = Proposal(id=COLLECTION,
-                            pi_name=None,
-                            project=COLLECTION,
-                            title=None)
+        proposal = Proposal(
+            id=COLLECTION, pi_name=None, project=COLLECTION, title=None
+        )
 
         if obs is None:
-            obs = SimpleObservation(collection=COLLECTION,
-                                    observation_id=args.observation[1],
-                                    sequence_number=None,
-                                    intent=ObservationIntentType.SCIENCE,
-                                    type='FIELD',
-                                    proposal=proposal,
-                                    telescope=taos,
-                                    instrument=None,
-                                    target=target,
-                                    meta_release=release_date)
+            obs = SimpleObservation(
+                collection=COLLECTION,
+                observation_id=args.observation[1],
+                sequence_number=None,
+                intent=ObservationIntentType.SCIENCE,
+                type='FIELD',
+                proposal=proposal,
+                telescope=taos,
+                instrument=None,
+                target=target,
+                meta_release=release_date,
+            )
 
-        provenance = Provenance(name=COLLECTION,
-                                version='{}.{}'.format(
-                                    t_header['VERSION_MAJOR'].data[0],
-                                    t_header['VERSION_MINOR'].data[0]),
-                                project=COLLECTION,
-                                producer=COLLECTION,
-                                run_id=t_header['RUN_ID'].data[0].decode(),
-                                reference='https://taos2.asiaa.sinica.edu.tw/',
-                                last_executed=release_date)
+        provenance = Provenance(
+            name=COLLECTION,
+            version='{}.{}'.format(
+                t_header['VERSION_MAJOR'].data[0],
+                t_header['VERSION_MINOR'].data[0],
+            ),
+            project=COLLECTION,
+            producer=COLLECTION,
+            run_id=t_header['RUN_ID'].data[0].decode(),
+            reference='https://taos2.asiaa.sinica.edu.tw/',
+            last_executed=release_date,
+        )
 
-        plane = Plane(product_id=product_id,
-                      data_release=release_date,
-                      meta_release=release_date,
-                      provenance=provenance,
-                      data_product_type=DataProductType.IMAGE,
-                      calibration_level=CalibrationLevel.RAW_STANDARD)
+        plane = Plane(
+            product_id=product_id,
+            data_release=release_date,
+            meta_release=release_date,
+            provenance=provenance,
+            data_product_type=DataProductType.IMAGE,
+            calibration_level=CalibrationLevel.RAW_STANDARD,
+        )
 
         artifact = mc.get_artifact_metadata(
-            f_name, ProductType.SCIENCE, ReleaseType.DATA,
-            mc.build_uri(COLLECTION, os.path.basename(f_name)))
+            f_name,
+            ProductType.SCIENCE,
+            ReleaseType.DATA,
+            mc.build_uri(COLLECTION, os.path.basename(f_name)),
+        )
 
         # parts are always named '0'
         part = Part('0')
 
         # do each of the three telescopes
         for telescope in [0, 1, 2]:
-            position = build_position(t_wcs,
-                                      t_window,
-                                      telescope)
+            position = build_position(t_wcs, t_window, telescope)
 
-            time = build_time(t_header['TIME_IN_SEC'].data[0],
-                              t_header['TIME_IN_MICROSEC'].data[0])
+            time = build_time(
+                t_header['TIME_IN_SEC'].data[0],
+                t_header['TIME_IN_MICROSEC'].data[0],
+            )
 
             energy = build_energy()
 
-            chunk = Chunk(naxis=4,
-                          position_axis_1=1,
-                          position_axis_2=2,
-                          energy_axis=3,
-                          time_axis=4,
-                          position=position,
-                          energy=energy,
-                          time=time)
+            chunk = Chunk(
+                naxis=4,
+                position_axis_1=1,
+                position_axis_2=2,
+                energy_axis=3,
+                time_axis=4,
+                position=position,
+                energy=energy,
+                time=time,
+            )
 
             part.chunks.append(chunk)
 
@@ -410,7 +441,6 @@ def build_from_hdf5(args):
 
 
 class TAOSIIMapping(cc.TelescopeMapping):
-
     def __init__(self, storage_name, headers):
         super().__init__(storage_name, headers)
 
@@ -510,7 +540,7 @@ class TAOSIIMapping(cc.TelescopeMapping):
         bp.set('Observation.proposal.project', 'TAOS2')
         bp.set(
             'Observation.proposal.title',
-            'Transneptunian Automated Occultation Survey'
+            'Transneptunian Automated Occultation Survey',
         )
         bp.set(
             'Observation.proposal.keywords',
@@ -540,9 +570,11 @@ class TAOSIIName(StorageName):
         return True
 
     def set_file_id(self):
-        self._file_id = StorageName.remove_extensions(
-            self._file_name
-        ).replace('.hdf5', '').replace('.h5', '')
+        self._file_id = (
+            StorageName.remove_extensions(self._file_name)
+            .replace('.hdf5', '')
+            .replace('.h5', '')
+        )
 
     def set_obs_id(self):
         bits = self._file_name.split('.')[0].split('_')
@@ -556,7 +588,7 @@ def accumulate_bp(bp, uri):
     """Configure the telescope-specific ObsBlueprint at the CAOM model
     Observation level."""
     logging.debug('Begin accumulate_bp.')
-    bp.configure_position_axes((1,2))
+    bp.configure_position_axes((1, 2))
     bp.configure_time_axis(3)
     bp.configure_energy_axis(4)
     bp.configure_polarization_axis(5)
@@ -582,8 +614,10 @@ def update(observation, **kwargs):
     if fqn is not None:
         taosii_name = TAOSIIName(file_name=os.path.basename(fqn))
     if taosii_name is None:
-        raise CadcException(f'Need one of fqn or uri defined for '
-                            f'{observation.observation_id}')
+        raise CadcException(
+            f'Need one of fqn or uri defined for '
+            f'{observation.observation_id}'
+        )
     logging.debug('Done update.')
     return observation
 
@@ -617,14 +651,12 @@ def _get_uris(args):
         for ii in args.lineage:
             result.append(ii.split('/', 1)[1])
     else:
-        raise CadcException(
-            f'Could not define uri from these args {args}')
+        raise CadcException(f'Could not define uri from these args {args}')
     return result
 
 
 def to_caom2():
-    """This function is called by pipeline execution. It must have this name.
-    """
+    """This function is called by pipeline execution. It must have this name."""
     args = get_gen_proc_arg_parser().parse_args()
     # uris = _get_uris(args)
     # blueprints = _build_blueprints(uris)
