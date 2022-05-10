@@ -81,12 +81,12 @@ import sys
 import traceback
 
 from caom2pipe.name_builder_composable import GuessingBuilder
-from caom2pipe import run_composable as rc
-from taosii2caom2 import APPLICATION, TAOSIIName
+from caom2pipe.run_composable import run_by_todo, run_by_state
+from taosii2caom2 import TAOSIIName, file2caom2_augmentation
 
 
 META_VISITORS = []
-DATA_VISITORS = []
+DATA_VISITORS = [file2caom2_augmentation]
 
 
 def _run():
@@ -97,9 +97,8 @@ def _run():
         is used by airflow for task instance management and reporting.
     """
     name_builder = GuessingBuilder(TAOSIIName)
-    return rc.run_by_todo(
+    return run_by_todo(
         name_builder=name_builder,
-        command_name=APPLICATION,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS,
     )
@@ -122,9 +121,8 @@ def _run_state():
     processed.
     """
     name_builder = GuessingBuilder(TAOSIIName)
-    return rc.run_by_state(
+    return run_by_state(
         name_builder=name_builder,
-        command_name=APPLICATION,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS,
     )

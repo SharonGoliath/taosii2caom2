@@ -1,26 +1,26 @@
 FROM opencadc/astropy:3.9-slim
 
-RUN apt-get update
-RUN apt-get install -y \
-    build-essential \
-    git
-    
-RUN pip install cadcdata \
-    cadctap \
-    caom2 \
-    caom2repo \
-    caom2utils \
-    importlib-metadata \
-    python-dateutil \
-    PyYAML \
-    spherical-geometry \
-    vos
+RUN apt-get update --no-install-recommends && \
+    apt-get dist-upgrade -y && \
+    apt-get install -y \
+        build-essential \
+        git \
+        libcfitsio-bin \
+        libhdf5-dev \
+        wget && \
+    rm -rf /var/lib/apt/lists/ /tmp/* /var/tmp/*
 
 WORKDIR /usr/src/app
 
-RUN apt-get install -y libhdf5-dev
-
-RUN pip install h5py
+RUN cd /tmp && \
+    wget https://support.hdfgroup.org/ftp/HDF5/tools/h5check/src/h5check-2.0.1.tar.gz  && \
+    tar xvf h5check-2.0.1.tar.gz && \
+    cd h5check-2.0.1 && \
+    ./configure && \
+    make && \
+    cp tool/h5check /usr/local/bin && \
+    cd /usr/src/app && \
+    rm -rf /tmp/h5check-2.0.1
 
 ARG CAOM2_BRANCH=master
 ARG CAOM2_REPO=opencadc
