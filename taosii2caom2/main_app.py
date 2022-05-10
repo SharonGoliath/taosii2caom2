@@ -132,6 +132,7 @@ import h5py
 from astropy import wcs
 
 from caom2 import CalibrationLevel, ProductType, DataProductType
+from caom2 import ObservationIntentType
 
 from caom2utils.caom2blueprint import Hdf5ObsBlueprint, Hdf5Parser
 from caom2pipe.astro_composable import build_ra_dec_as_deg
@@ -234,6 +235,7 @@ class TAOSIIMapping(TelescopeMapping):
                          the value from the HDF5 file]
         """
         #
+        bp.set('Observation.intent', ObservationIntentType.SCIENCE)
         bp.set('Observation.type', (['//header/run/obstype'], None))
         bp.set('Observation.metaRelease', '2022-05-05 20:39:23.050')
         bp.set('Observation.instrument.name', (['//header/run/origin'], None))
@@ -279,10 +281,7 @@ class TAOSIIMapping(TelescopeMapping):
         bp.set('Observation.telescope.geoLocationZ', 3271243.2086214763)
 
         bp.set('Plane.calibrationLevel', CalibrationLevel.RAW_STANDARD)
-        if self._storage_name.get_product_type == ProductType.CALIBRATION:
-            bp.set('Plane.dataProductType', DataProductType.IMAGE)
-        else:
-            bp.set('Plane.dataProductType', DataProductType.TIMESERIES)
+        bp.set('Plane.dataProductType', DataProductType.TIMESERIES)
 
         bp.set('Artifact.productType', self._storage_name.get_product_type)
 
@@ -335,32 +334,18 @@ class TAOSIIMapping(TelescopeMapping):
         bp.set('Chunk.position.equinox', (['//header/object/epoch'], None))
 
         bp.set('Chunk.time.axis.axis.ctype', 'TIME')
-        if self._storage_name.get_product_type == ProductType.SCIENCE:
-            bp.set('Chunk.time.axis.axis.cunit', 's')
-            bp.set('Chunk.time.axis.range.start.pix', 0)
-            bp.set(
-                'Chunk.time.axis.range.start.val',
-                (['//header/timeseries/mjdrunstart'], None),
-            )
-            bp.set('Chunk.time.axis.range.end.pix', 'get_time_axis_range_end()')
-            bp.set(
-                'Chunk.time.axis.range.end.val',
-                (['//header/timeseries/mjdrunend'], None),
-            )
-            bp.set('Chunk.time.exposure', 'get_science_exposure()')
-        else:
-            bp.set('Chunk.time.axis.axis.cunit', 'd')
-            bp.set('Chunk.time.axis.range.start.pix', 0.5)
-            bp.set('Chunk.time.axis.range.end.pix', 1.5)
-            bp.set(
-                'Chunk.time.axis.range.start.val',
-                (['//header/exposure/mjdstart'], None),
-            )
-            bp.set(
-                'Chunk.time.axis.range.end.val',
-                (['//header/exposure/mjdend'], None),
-            )
-            bp.set('Chunk.time.exposure', 'get_cal_exposure()')
+        bp.set('Chunk.time.axis.axis.cunit', 's')
+        bp.set('Chunk.time.axis.range.start.pix', 0)
+        bp.set(
+            'Chunk.time.axis.range.start.val',
+            (['//header/timeseries/mjdrunstart'], None),
+        )
+        bp.set('Chunk.time.axis.range.end.pix', 'get_time_axis_range_end()')
+        bp.set(
+            'Chunk.time.axis.range.end.val',
+            (['//header/timeseries/mjdrunend'], None),
+        )
+        bp.set('Chunk.time.exposure', 'get_exposure()')
 
         bp.set('Chunk.energy.specsys', 'TOPOCENT')
         bp.set('Chunk.energy.ssysobs', 'TOPOCENT')
@@ -373,15 +358,7 @@ class TAOSIIMapping(TelescopeMapping):
         bp.set('Chunk.energy.axis.range.end.pix', 1.5)
         bp.set('Chunk.energy.axis.range.end.val', 800)
 
-    def get_cal_exposure(self, ext):
-        mjd_start = self._lookup('header/exposure/mjdstart')
-        mjd_end = self._lookup('header/exposure/mjdend')
-        result = None
-        if mjd_start is not None and mjd_end is not None:
-            result = mjd_end - mjd_start
-        return result
-
-    def get_science_exposure(self, ext):
+    def get_exposure(self, ext):
         mjdrunstart = self._lookup('header/timeseries/mjdrunstart')
         mjdrunend = self._lookup('header/timeseries/mjdrunend')
         result = None
@@ -458,6 +435,37 @@ class TAOSIIMapping(TelescopeMapping):
         self._logger.debug('End _update_artifact')
 
 
+class CalibrationMapping(TAOSIIMapping):
+
+    def __init__(self, storage_name, h5file):
+        super().__init__(storage_name, h5file)
+
+    def accumulate_blueprint(self, bp, application=None):
+        super().accumulate_blueprint(bp)
+        bp.set('Observation.intent', ObservationIntentType.CALIBRATION)
+        bp.set('Plane.dataProductType', DataProductType.IMAGE)
+        bp.set('Chunk.time.axis.axis.cunit', 'd')
+
+        bp.set('Chunk.time.axis.range.start.pix', 0.5)
+        bp.set('Chunk.time.axis.range.end.pix', 1.5)
+        bp.set(
+            'Chunk.time.axis.range.start.val',
+            (['//header/exposure/mjdstart'], None),
+        )
+        bp.set(
+            'Chunk.time.axis.range.end.val',
+            (['//header/exposure/mjdend'], None),
+        )
+
+    def get_exposure(self, ext):
+        mjd_start = self._lookup('header/exposure/mjdstart')
+        mjd_end = self._lookup('header/exposure/mjdend')
+        result = None
+        if mjd_start is not None and mjd_end is not None:
+            result = mjd_end - mjd_start
+        return result
+
+
 class TAOSIIMetadataReader(FileMetadataReader):
 
     def __init__(self):
@@ -514,7 +522,11 @@ class TAOSII2caom2Visitor(Fits2caom2Visitor):
         )
 
     def _get_mapping(self, headers):
-        return TAOSIIMapping(self._storage_name, self._h5_file)
+        if self._storage_name.get_product_type == ProductType.SCIENCE:
+            result = TAOSIIMapping(self._storage_name, self._h5_file)
+        else:
+            result = CalibrationMapping(self._storage_name, self._h5_file)
+        return result
 
     def _get_parser(self, headers, blueprint, uri):
         self._logger.debug(
