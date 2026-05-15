@@ -2,7 +2,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2025.                            (c) 2025.
+#  (c) 2026.                            (c) 2026.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -145,6 +145,7 @@ from collections import defaultdict
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from os.path import basename, join
+from urllib.parse import urlparse
 
 from astropy.time import Time
 
@@ -166,7 +167,7 @@ from caom2pipe.execute_composable import (
 from caom2pipe.manage_composable import CadcException, CaomName, make_datetime, StorageName, TaskType, ValueRepairCache
 
 
-__all__ = ['set_storage_name_from_local_preconditions', 'TAOSII2caom2Visitor', 'TAOSIIName']
+__all__ = ['set_storage_name_from_local_preconditions', 'TAOSII2caom2Visitor', 'TAOSIIName', 'TAOSIINameModifyOnly']
 
 
 class TaosiiValueRepair(ValueRepairCache):
@@ -825,7 +826,7 @@ class TAOSIIName(StorageName):
     TAOSII_NAME_PATTERN = '*'
 
     def __init__(self, source_names=None):
-        # the descriptors values get assigned in the _set_preconditions call the execute_composable.CaomExecutes
+        # the descriptors values get assigned in the _set_preconditions call in the execute_composable.CaomExecutes
         # specialization
         self._file_uri = None
         self.descriptors = {}
@@ -869,6 +870,25 @@ class TAOSIIName(StorageName):
     @staticmethod
     def replace_for_obs_id(value):
         return TAOSIIName.remove_extensions(value)
+
+
+class TAOSIINameModifyOnly(TAOSIIName):
+
+    def __init__(self, source_names):
+        super().__init__(source_names=source_names)
+
+    def set_destination_uris(self):
+        for entry in self._source_names:
+            # check that the entry is truly a URI
+            try:
+                _ = urlparse(entry)
+                self._destination_uris.append(entry)
+            except ValueError:
+                raise CadcException(f'Do not understand {entry} format. Expecting URIs like cadc:TAOSII/2025/12/01/...')
+
+    @property
+    def file_uri(self):
+        return self._destination_uris[0]
 
 
 def set_storage_name_from_local_preconditions(storage_name, source_fqn, logger):

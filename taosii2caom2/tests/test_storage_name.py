@@ -67,7 +67,7 @@
 #
 
 import logging
-from taosii2caom2 import set_storage_name_from_local_preconditions, TAOSIIName
+from taosii2caom2 import set_storage_name_from_local_preconditions, TAOSIIName, TAOSIINameModifyOnly
 
 
 def test_is_valid():
@@ -111,3 +111,14 @@ def test_storage_name(test_config, test_data_dir):
                 or test_subject.file_uri.startswith('cadc:TAOSII/2025/04/29/')
             ):
                 assert False, f'wrong file_uri {test_subject.file_uri}'
+
+
+def test_storage_name_for_uris(test_config, test_data_dir):
+    test_uri = (
+        'cadc:TAOSII/2025/12/01/20251201T004444Z/'
+        'taos2_20251201T004444Z_GAIADR3_00063522398805688960_F203_010_photometry_unified.h5'
+    )
+
+    test_storage_name = TAOSIINameModifyOnly(source_names=[test_uri])
+    assert test_storage_name.file_uri == test_uri, f'wrong uri {test_storage_name.file_uri}'
+    assert test_storage_name.destination_uris[0] == test_uri, f'wrong uri {test_storage_name.destination_uris}'

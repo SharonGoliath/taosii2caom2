@@ -2,7 +2,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2025.                            (c) 2025.
+#  (c) 2026.                            (c) 2026.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -79,7 +79,7 @@ import traceback
 
 from caom2pipe.client_composable import ClientCollection
 from caom2pipe.data_source_composable import LocalFilesDataSourceRunnerMeta
-from caom2pipe.manage_composable import Config, StorageName
+from caom2pipe.manage_composable import CadcException, Config, StorageName, TaskType
 from caom2pipe.run_composable import run_by_todo_runner_meta, run_by_state_runner_meta
 from taosii2caom2 import main_app, file2caom2_augmentation
 
@@ -97,10 +97,20 @@ def _common_init():
     StorageName.data_source_extensions = config.data_source_extensions
     clients = ClientCollection(config)
     sources = []
+    name_ctor = None
     if config.use_local_files:
         source = LocalFilesDataSourceRunnerMeta(config, clients.data_client, storage_name_ctor=main_app.TAOSIIName)
         sources.append(source)
-    return clients, config, sources
+        name_ctor = main_app.TAOSIIName
+    else:
+        if config.task_types == [TaskType.MODIFY]:
+            name_ctor = main_app.TAOSIINameModifyOnly
+
+    if name_ctor is None:
+        raise CadcException(
+            'Configuration is inconsistent for execution. Check "task_types" and "use_local_files" settings.'
+        )
+    return clients, config, sources, name_ctor
 
 
 def _run():
@@ -109,7 +119,7 @@ def _run():
 
     :return 0 if successful, -1 if there's any sort of failure.
     """
-    clients, config, sources = _common_init()
+    clients, config, sources, name_ctor = _common_init()
     return run_by_todo_runner_meta(
         config=config,
         meta_visitors=META_VISITORS,
@@ -118,7 +128,7 @@ def _run():
         clients=clients,
         organizer_module_name='taosii2caom2.main_app',
         organizer_class_name='TAOSIIOrganizeExecutesRunnerMeta',
-        storage_name_ctor=main_app.TAOSIIName,
+        storage_name_ctor=name_ctor,
     )
 
 
@@ -137,7 +147,7 @@ def run():
 def _run_incremental():
     """Uses a state file with a timestamp to kick off time-boxed entry processing.
     """
-    clients, config, sources = _common_init()
+    clients, config, sources, name_ctor = _common_init()
     return run_by_state_runner_meta(
         config=config,
         meta_visitors=META_VISITORS,
@@ -146,7 +156,7 @@ def _run_incremental():
         sources=sources,
         organizer_module_name='taosii2caom2.main_app',
         organizer_class_name='TAOSIIOrganizeExecutesRunnerMeta',
-        storage_name_ctor=main_app.TAOSIIName,
+        storage_name_ctor=name_ctor,
     )
 
 
